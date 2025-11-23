@@ -25,7 +25,7 @@ public class DocumentChunk {
 
     // Embedding armazenado como string JSON (para H2)
     // Em producao com pgvector seria tipo vector
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT", nullable = true)
     private String embedding;
 
     @Column(name = "created_at", nullable = false, updatable = false)

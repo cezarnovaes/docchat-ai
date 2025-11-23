@@ -13,40 +13,61 @@ import java.util.List;
 @Service
 public class PdfService {
 
-    private static final int CHUNK_SIZE = 1000; // caracteres por chunk
-    private static final int CHUNK_OVERLAP = 200; // sobreposicao entre chunks
-
-    /**
-     * Extrai texto de um PDF
-     */
+    private static final int CHUNK_SIZE = 800; // Reduzido de 1000 para 800
+    
     public String extractText(MultipartFile file) {
+        PDDocument document = null;
         try {
-            PDDocument document = Loader.loadPDF(file.getBytes());
+            if (file.getSize() > 10 * 1024 * 1024) {
+                throw new RuntimeException("Arquivo muito grande. Maximo 10MB");
+            }
+
+            document = Loader.loadPDF(file.getBytes());
+            
+            int pageCount = document.getNumberOfPages();
+            if (pageCount > 50) {
+                throw new RuntimeException("PDF muito grande. Maximo 50 paginas");
+            }
+
             PDFTextStripper stripper = new PDFTextStripper();
             String text = stripper.getText(document);
-            document.close();
+            
             return text;
+            
         } catch (IOException e) {
             throw new RuntimeException("Erro ao extrair texto do PDF: " + e.getMessage(), e);
+        } finally {
+            if (document != null) {
+                try {
+                    document.close();
+                } catch (IOException e) {
+                    // Ignora
+                }
+            }
         }
     }
 
-    /**
-     * Conta paginas do PDF
-     */
     public int countPages(MultipartFile file) {
+        PDDocument document = null;
         try {
-            PDDocument document = Loader.loadPDF(file.getBytes());
+            document = Loader.loadPDF(file.getBytes());
             int pages = document.getNumberOfPages();
-            document.close();
             return pages;
         } catch (IOException e) {
             throw new RuntimeException("Erro ao contar paginas do PDF: " + e.getMessage(), e);
+        } finally {
+            if (document != null) {
+                try {
+                    document.close();
+                } catch (IOException e) {
+                    // Ignora
+                }
+            }
         }
     }
 
     /**
-     * Divide texto em chunks menores para processamento
+     * Divide texto em chunks SIMPLES - sem sobreposicao
      */
     public List<String> splitIntoChunks(String text) {
         List<String> chunks = new ArrayList<>();
@@ -55,42 +76,30 @@ public class PdfService {
             return chunks;
         }
 
-        // Limpa o texto
+        // Limpa espacos extras
         text = text.replaceAll("\\s+", " ").trim();
-
+        
+        // Divide em pedacos de CHUNK_SIZE caracteres
+        int textLength = text.length();
         int start = 0;
-        while (start < text.length()) {
-            int end = Math.min(start + CHUNK_SIZE, text.length());
+        
+        while (start < textLength) {
+            int end = Math.min(start + CHUNK_SIZE, textLength);
             
-            // Tenta terminar em um ponto final ou quebra de paragrafo
-            if (end < text.length()) {
-                int lastPeriod = text.lastIndexOf(". ", end);
-                int lastNewline = text.lastIndexOf("\n", end);
-                int breakPoint = Math.max(lastPeriod, lastNewline);
-                
-                if (breakPoint > start + CHUNK_SIZE / 2) {
-                    end = breakPoint + 1;
-                }
-            }
-
+            // Pega o pedaco
             String chunk = text.substring(start, end).trim();
-            if (!chunk.isEmpty()) {
+            
+            if (!chunk.isEmpty() && chunk.length() > 50) { // Ignora chunks muito pequenos
                 chunks.add(chunk);
             }
-
-            start = end - CHUNK_OVERLAP;
-            if (start < 0) start = 0;
-            if (start >= text.length()) break;
+            
+            start = end;
         }
 
         return chunks;
     }
 
-    /**
-     * Estima quantidade de tokens (aproximado)
-     */
     public int estimateTokens(String text) {
-        // Aproximacao: 1 token ~ 4 caracteres em ingles, ~3 em portugues
         return text.length() / 3;
     }
 }

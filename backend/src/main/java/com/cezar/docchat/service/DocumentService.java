@@ -39,9 +39,16 @@ public class DocumentService {
 
     @Transactional
     public DocumentResponse uploadAndProcess(MultipartFile file, User user) {
+        System.out.println("=== INICIO UPLOAD ===");
+        System.out.println("Tamanho arquivo: " + file.getSize() + " bytes");
+        
         // Validar arquivo
         if (file.isEmpty()) {
             throw new RuntimeException("Arquivo vazio");
+        }
+        
+        if (file.getSize() > 5 * 1024 * 1024) {
+            throw new RuntimeException("Arquivo muito grande. Maximo 5MB");
         }
         
         String contentType = file.getContentType();
@@ -50,6 +57,7 @@ public class DocumentService {
         }
 
         // Criar documento
+        System.out.println("Criando documento no banco...");
         Document document = new Document();
         document.setFilename(UUID.randomUUID().toString() + ".pdf");
         document.setOriginalFilename(file.getOriginalFilename());
@@ -58,43 +66,55 @@ public class DocumentService {
         document.setStatus(DocumentStatus.PROCESSING);
         document.setUser(user);
 
-        // Contar paginas
+        System.out.println("Contando paginas...");
         int pageCount = pdfService.countPages(file);
         document.setPageCount(pageCount);
+        System.out.println("Paginas: " + pageCount);
 
         document = documentRepository.save(document);
+        System.out.println("Documento salvo ID: " + document.getId());
 
         try {
-            // Extrair texto
+            System.out.println("Extraindo texto do PDF...");
             String text = pdfService.extractText(file);
+            System.out.println("Texto extraido, tamanho: " + text.length() + " caracteres");
 
-            // Dividir em chunks
+            if (text.length() > 100000) {
+                throw new RuntimeException("Documento muito longo. Tente um PDF menor");
+            }
+
+            System.out.println("Dividindo em chunks...");
             List<String> chunks = pdfService.splitIntoChunks(text);
+            System.out.println("Total de chunks: " + chunks.size());
+            
+            if (chunks.size() > 50) {
+                throw new RuntimeException("Documento gerou muitos chunks. Tente um PDF menor");
+            }
 
-            // Processar cada chunk
+            System.out.println("Salvando chunks no banco...");
             for (int i = 0; i < chunks.size(); i++) {
                 String chunkText = chunks.get(i);
                 
-                // Gerar embedding
-                List<Double> embedding = openAIService.generateEmbedding(chunkText);
-
-                // Salvar chunk
                 DocumentChunk chunk = new DocumentChunk();
                 chunk.setContent(chunkText);
                 chunk.setChunkIndex(i);
                 chunk.setTokenCount(pdfService.estimateTokens(chunkText));
-                chunk.setEmbedding(embeddingToJson(embedding));
+                chunk.setEmbedding(null);
                 chunk.setDocument(document);
                 
                 chunkRepository.save(chunk);
+                System.out.println("Chunk " + (i+1) + "/" + chunks.size() + " salvo");
             }
 
-            // Atualizar status
+            System.out.println("Atualizando status do documento...");
             document.setStatus(DocumentStatus.READY);
             document.setProcessedAt(java.time.LocalDateTime.now());
             documentRepository.save(document);
+            System.out.println("=== PROCESSAMENTO CONCLUIDO ===");
 
         } catch (Exception e) {
+            System.err.println("ERRO: " + e.getMessage());
+            e.printStackTrace();
             document.setStatus(DocumentStatus.ERROR);
             documentRepository.save(document);
             throw new RuntimeException("Erro ao processar documento: " + e.getMessage(), e);

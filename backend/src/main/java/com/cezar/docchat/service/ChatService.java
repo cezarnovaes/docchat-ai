@@ -37,6 +37,10 @@ public class ChatService {
 
     @Transactional
     public ChatResponse chat(ChatRequest request, User user) {
+        System.out.println("=== INICIO CHAT ===");
+        System.out.println("Document ID: " + request.getDocumentId());
+        System.out.println("Message: " + request.getMessage());
+        
         // Verificar se documento existe e pertence ao usuario
         Document document = documentRepository.findById(request.getDocumentId())
                 .orElseThrow(() -> new RuntimeException("Documento nao encontrado"));
@@ -49,41 +53,51 @@ public class ChatService {
             throw new RuntimeException("Documento ainda esta sendo processado");
         }
 
-        // Gerar embedding da pergunta
-        List<Double> questionEmbedding = openAIService.generateEmbedding(request.getMessage());
-
-        // Buscar chunks mais relevantes
+        System.out.println("Documento encontrado: " + document.getOriginalFilename());
+        
+        // TEMPORARIO: Sem embeddings, usar todos os chunks
         List<DocumentChunk> allChunks = documentService.getChunksByDocumentId(document.getId());
-        List<ChunkWithScore> scoredChunks = new ArrayList<>();
+        System.out.println("Total de chunks encontrados: " + allChunks.size());
 
-        for (DocumentChunk chunk : allChunks) {
-            List<Double> chunkEmbedding = jsonToEmbedding(chunk.getEmbedding());
-            double similarity = cosineSimilarity(questionEmbedding, chunkEmbedding);
-            scoredChunks.add(new ChunkWithScore(chunk, similarity));
-        }
-
-        // Ordenar por similaridade e pegar os top K
-        scoredChunks.sort(Comparator.comparingDouble(ChunkWithScore::score).reversed());
-        List<ChunkWithScore> topChunks = scoredChunks.stream()
+        // Pega os 3 primeiros chunks por enquanto
+        List<DocumentChunk> topChunks = allChunks.stream()
                 .limit(TOP_K_CHUNKS)
+                .toList();
+
+        System.out.println("Usando " + topChunks.size() + " chunks");
+
+        // Converte para ChunkWithScore com score fake
+        List<ChunkWithScore> scoredChunks = topChunks.stream()
+                .map(chunk -> new ChunkWithScore(chunk, 1.0))
                 .toList();
 
         // Montar contexto
         StringBuilder context = new StringBuilder();
         List<String> sources = new ArrayList<>();
         
-        for (ChunkWithScore scored : topChunks) {
-            context.append(scored.chunk().getContent()).append("\n\n---\n\n");
+        for (ChunkWithScore scored : scoredChunks) {
+            String chunkContent = scored.chunk().getContent();
+            System.out.println("Chunk " + scored.chunk().getChunkIndex() + " tamanho: " + chunkContent.length() + " chars");
+            System.out.println("Primeiros 100 chars: " + chunkContent.substring(0, Math.min(100, chunkContent.length())));
+            
+            context.append(chunkContent).append("\n\n---\n\n");
             sources.add("Trecho " + (scored.chunk().getChunkIndex() + 1));
         }
 
+        System.out.println("Contexto montado, tamanho total: " + context.length() + " chars");
+        System.out.println("Primeiros 200 chars do contexto:");
+        System.out.println(context.substring(0, Math.min(200, context.length())));
+
         // Chamar OpenAI com contexto
+        System.out.println("Chamando OpenAI...");
         String answer = openAIService.chatWithContext(context.toString(), request.getMessage());
+        System.out.println("Resposta recebida: " + answer.substring(0, Math.min(100, answer.length())));
 
         // Salvar mensagens no historico
         saveMessage(user, document, MessageRole.USER, request.getMessage());
         saveMessage(user, document, MessageRole.ASSISTANT, answer);
 
+        System.out.println("=== FIM CHAT ===");
         return new ChatResponse(answer, sources);
     }
 
