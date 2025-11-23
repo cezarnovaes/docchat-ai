@@ -86,6 +86,17 @@ DocChat-AI/
 └── README.md
 ```
 
+## 📸 Screenshots
+
+### Tela de Login
+![Login](docs/screenshots/login.png)
+
+### Dashboard
+![Dashboard](docs/screenshots/dashboard.png)
+
+### Chat Interativo
+![Chat](docs/screenshots/chat.png)
+
 ## 🏃 Como Executar Localmente
 
 ### Pré-requisitos
@@ -248,7 +259,7 @@ docker run -p 8080:8080 \
 
 ## 🚀 Deploy
 
-### Render (Recomendado - Gratuito)
+### Render (Gratuito)
 
 1. Conecte seu repositório GitHub ao Render
 2. Configure as variáveis de ambiente:
@@ -262,16 +273,10 @@ docker run -p 8080:8080 \
 
 - [x] Autenticação JWT
 - [x] Upload e processamento de PDFs
-- [x] Chat com OpenAI
+- [x] Chat com OpenAI (RAG básico)
+- [x] Frontend React interativo
 - [x] Swagger/OpenAPI
-- [ ] Embeddings e busca semântica otimizada
-- [ ] Frontend React
-- [ ] Streaming de respostas
-- [ ] Suporte a múltiplos formatos (Word, TXT)
-- [ ] Deploy em produção
-- [ ] Testes automatizados
-- [ ] CI/CD
-- [ ] Cache de embeddings
+- [x] CI/CD com GitHub Actions
 
 ## 🧠 Como Funciona o RAG
 
